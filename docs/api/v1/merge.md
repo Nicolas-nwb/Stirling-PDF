@@ -1,6 +1,6 @@
-# API: Fusionner plusieurs PDF
+# API: Merge Multiple PDFs
 
-Cette API permet de fusionner plusieurs fichiers PDF en un seul document. Outre l'envoi de fichiers, il est possible de fournir des URLs distantes via le champ `urlInputs`.
+This API merges several PDF files into one document. In addition to uploading files, you can provide remote URLs using the `urlInputs` field.
 
 ## Endpoint
 
@@ -8,20 +8,21 @@ Cette API permet de fusionner plusieurs fichiers PDF en un seul document. Outre 
 POST /api/v1/general/merge-pdfs
 ```
 
-## Paramètres
+## Parameters
 
-- `fileInput` – fichiers PDF à fusionner (optionnel si `urlInputs` est utilisé).
-- `urlInputs` – liste de liens HTTP(S) vers des PDF. Les URLs doivent être séparées par des retours à la ligne.
-- `removeCertSign` – `true` ou `false` pour indiquer si les signatures doivent être supprimées.
-- `sortType` – méthode de tri des fichiers (par défaut `orderProvided`).
+- `fileInput` – PDF files to merge (optional when `urlInputs` is used).
+- `urlInputs` – list of HTTP(S) links to PDFs. Separate URLs with newline characters.
+- `removeCertSign` – `true` or `false` to specify whether signatures should be removed.
+- `sortType` – method for sorting files (defaults to `orderProvided`).
 
-## Exemple cURL
+## cURL Example
 
 ```bash
 curl -X POST \
-  -F "urlInputs=https://exemple.com/a.pdf\nhttps://exemple.com/b.pdf" \
+  -F "urlInputs=https://example.com/a.pdf\nhttps://example.com/b.pdf" \
   -F "removeCertSign=true" \
-  https://votre-instance/api/v1/general/merge-pdfs -o fusion.pdf
+  https://your-instance/api/v1/general/merge-pdfs -o merged.pdf
 ```
 
-L'API retournera le PDF fusionné dans la réponse.
+The API returns the merged PDF in the response.
+
