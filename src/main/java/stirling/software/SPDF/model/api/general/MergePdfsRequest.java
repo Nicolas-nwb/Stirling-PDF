@@ -32,4 +32,9 @@ public class MergePdfsRequest extends MultiplePDFFiles {
             requiredMode = Schema.RequiredMode.REQUIRED,
             defaultValue = "true")
     private Boolean removeCertSign;
+
+    @Schema(
+            description = "Optional array of URLs to PDF files to merge",
+            requiredMode = Schema.RequiredMode.NOT_REQUIRED)
+    private String[] urlInputs;
 }

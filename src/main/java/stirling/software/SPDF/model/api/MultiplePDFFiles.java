@@ -10,6 +10,8 @@ import lombok.EqualsAndHashCode;
 @Data
 @EqualsAndHashCode
 public class MultiplePDFFiles {
-    @Schema(description = "The input PDF files", requiredMode = Schema.RequiredMode.REQUIRED)
+    @Schema(
+            description = "The input PDF files",
+            requiredMode = Schema.RequiredMode.NOT_REQUIRED)
     private MultipartFile[] fileInput;
 }
