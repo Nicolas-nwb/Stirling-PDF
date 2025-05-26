@@ -28,6 +28,10 @@
                 </div>
               </div>
               <div class="mb-3">
+                <label for="urlInputs">URLs (une par ligne)</label>
+                <textarea class="form-control" name="urlInputs" id="urlInputs" rows="3" placeholder="https://exemple.com/a.pdf&#10;https://exemple.com/b.pdf"></textarea>
+              </div>
+              <div class="mb-3">
                 <input type="checkbox" name="removeCertSign" id="removeCertSign">
                 <label for="removeCertSign" th:text="#{merge.removeCertSign}">Remove digital signature in the merged
                   file?</label>

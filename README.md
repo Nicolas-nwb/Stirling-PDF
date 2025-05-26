@@ -37,7 +37,7 @@ All documentation available at [https://docs.stirlingpdf.com/](https://docs.stir
 
 - View and modify PDFs - View multi-page PDFs with custom viewing, sorting, and searching. Plus, on-page edit features like annotating, drawing, and adding text and images. (Using PDF.js with Joxit and Liberation fonts)
 - Full interactive GUI for merging/splitting/rotating/moving PDFs and their pages
-- Merge multiple PDFs into a single resultant file
+- Merge multiple PDFs into a single resultant file (possible via fichiers ou URLs)
 - Split PDFs into multiple files at specified page numbers or extract all pages as individual files
 - Reorganize PDF pages into different orders
 - Rotate PDFs in 90-degree increments
