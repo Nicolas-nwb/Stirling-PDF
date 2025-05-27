@@ -114,9 +114,9 @@ public class MergeController {
     @Operation(
             summary = "Merge multiple PDF files into one",
             description =
-                    "This endpoint merges multiple PDF files into a single PDF file. The merged"
-                            + " file will contain all pages from the input files in the order they were"
-                            + " provided. Input:PDF Output:PDF Type:MISO")
+                    "This endpoint merges multiple PDF files or URLs pointing to PDFs into a single PDF file."
+                            + " The merged file will contain all pages from the input files in the order they were"
+                            + " provided. Input:PDF or URL Output:PDF Type:MISO")
     public ResponseEntity<byte[]> mergePdfs(@ModelAttribute MergePdfsRequest request)
             throws IOException {
         List<File> filesToDelete = new ArrayList<>(); // List of temporary files to delete
@@ -127,20 +127,41 @@ public class MergeController {
 
         try {
             MultipartFile[] files = request.getFileInput();
-            Arrays.sort(
-                    files,
-                    getSortComparator(
-                            request.getSortType())); // Sort files based on the given sort type
+            String[] urlInputs = request.getUrlInputs();
 
+            List<File> inputFiles = new ArrayList<>();
             PDFMergerUtility mergerUtility = new PDFMergerUtility();
             long totalSize = 0;
-            for (MultipartFile multipartFile : files) {
-                totalSize += multipartFile.getSize();
-                File tempFile =
-                        GeneralUtils.convertMultipartFileToFile(
-                                multipartFile); // Convert MultipartFile to File
-                filesToDelete.add(tempFile); // Add temp file to the list for later deletion
-                mergerUtility.addSource(tempFile); // Add source file to the merger utility
+
+            if (files != null && files.length > 0) {
+                Arrays.sort(
+                        files,
+                        getSortComparator(
+                                request.getSortType()));
+                for (MultipartFile multipartFile : files) {
+                    totalSize += multipartFile.getSize();
+                    File tempFile =
+                            GeneralUtils.convertMultipartFileToFile(multipartFile);
+                    filesToDelete.add(tempFile);
+                    inputFiles.add(tempFile);
+                }
+            } else if (urlInputs != null && urlInputs.length > 0) {
+                for (String url : urlInputs) {
+                    if (!GeneralUtils.isValidURL(url) || !GeneralUtils.isURLReachable(url)) {
+                        throw new IllegalArgumentException("Invalid or unreachable URL: " + url);
+                    }
+                    File downloaded = GeneralUtils.downloadFileFromURL(url);
+                    totalSize += downloaded.length();
+                    filesToDelete.add(downloaded);
+                    inputFiles.add(downloaded);
+                }
+            } else {
+                throw new IllegalArgumentException(
+                        "No input provided, please upload files or provide URLs.");
+            }
+
+            for (File file : inputFiles) {
+                mergerUtility.addSource(file);
             }
 
             mergedTempFile = Files.createTempFile("merged-", ".pdf").toFile();
@@ -174,9 +195,17 @@ public class MergeController {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             mergedDocument.save(baos);
 
-            String mergedFileName =
-                    files[0].getOriginalFilename().replaceFirst("[.][^.]+$", "")
-                            + "_merged_unsigned.pdf";
+            String mergedFileName;
+            if (files != null && files.length > 0 && files[0].getOriginalFilename() != null) {
+                mergedFileName =
+                        files[0].getOriginalFilename().replaceFirst("[.][^.]+$", "")
+                                + "_merged_unsigned.pdf";
+            } else if (urlInputs != null && urlInputs.length > 0) {
+                mergedFileName =
+                        GeneralUtils.convertToFileName(urlInputs[0]) + "_merged_unsigned.pdf";
+            } else {
+                mergedFileName = "merged_unsigned.pdf";
+            }
             return WebResponseUtils.boasToWebResponse(
                     baos, mergedFileName); // Return the modified PDF
 

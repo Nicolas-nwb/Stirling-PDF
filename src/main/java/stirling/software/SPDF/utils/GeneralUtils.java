@@ -161,6 +161,20 @@ public class GeneralUtils {
         return tempFile.toFile();
     }
 
+    public static File downloadFileFromURL(String urlStr) throws IOException {
+        URL url = URI.create(urlStr).toURL();
+        Path tempFile = Files.createTempFile("urlInput-", ".pdf");
+        try (InputStream in = url.openStream();
+                FileOutputStream out = new FileOutputStream(tempFile.toFile())) {
+            byte[] buffer = new byte[8192];
+            int bytesRead;
+            while ((bytesRead = in.read(buffer)) != -1) {
+                out.write(buffer, 0, bytesRead);
+            }
+        }
+        return tempFile.toFile();
+    }
+
     public static Long convertSizeToBytes(String sizeStr) {
         if (sizeStr == null) {
             return null;
