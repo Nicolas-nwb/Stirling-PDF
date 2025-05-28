@@ -117,12 +117,63 @@ public class GeneralUtils {
 
             // Check if the URL is reachable
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod("HEAD");
-            // connection.setConnectTimeout(5000); // Set connection timeout
-            // connection.setReadTimeout(5000);    // Set read timeout
+
+            // Pour les URLs S3 et autres services qui ne supportent pas HEAD,
+            // on utilise GET avec une plage limitée pour éviter de télécharger tout le fichier
+            if (url.getHost().contains("s3")
+                    || url.getHost().contains("amazonaws")
+                    || url.getHost().contains("wasabisys")
+                    || url.getHost().contains("digitalocean")
+                    // Fournisseurs cloud majeurs
+                    || url.getHost().contains("googleusercontent")
+                    || url.getHost().contains("storage.googleapis")
+                    || url.getHost().contains("blob.core.windows")
+                    || url.getHost().contains("azureedge")
+                    // Services de stockage d'objets alternatifs
+                    || url.getHost().contains("backblaze")
+                    || url.getHost().contains("b2api")
+                    || url.getHost().contains("vultr")
+                    || url.getHost().contains("linode")
+                    || url.getHost().contains("scaleway")
+                    || url.getHost().contains("ovh")
+                    || url.getHost().contains("cloudflare")
+                    // Services spécialisés
+                    || url.getHost().contains("minio")
+                    || url.getHost().contains("ceph")
+                    || url.getHost().contains("spaces")
+                    || url.getHost().contains("filebase")
+                    || url.getHost().contains("storj")
+                    // Services asiatiques
+                    || url.getHost().contains("aliyun")
+                    || url.getHost().contains("tencentcloud")
+                    || url.getHost().contains("qcloud")
+                    || url.getHost().contains("baidu")
+                    || url.getHost().contains("ncloud")
+                    // Autres fournisseurs
+                    || url.getHost().contains("oracle")
+                    || url.getHost().contains("ibm")
+                    || url.getHost().contains("rackspace")) {
+                connection.setRequestMethod("GET");
+                connection.setRequestProperty(
+                        "Range", "bytes=0-1023"); // Télécharge seulement les 1024 premiers bytes
+            } else {
+                connection.setRequestMethod("HEAD");
+            }
+
+            // Timeout configurations plus permissifs
+            connection.setConnectTimeout(10000); // 10 secondes
+            connection.setReadTimeout(10000); // 10 secondes
+
+            // User-Agent pour éviter les blocages
+            connection.setRequestProperty("User-Agent", "Stirling-PDF/1.0");
+
             int responseCode = connection.getResponseCode();
+
+            // Accepter les codes 200-399 et aussi 206 (Partial Content) pour les requêtes Range
             return (200 <= responseCode && responseCode <= 399);
         } catch (Exception e) {
+            // Log l'erreur pour débugger
+            log.debug("URL validation failed for {}: {}", urlStr, e.getMessage());
             return false; // Return false in case of any exception
         }
     }
