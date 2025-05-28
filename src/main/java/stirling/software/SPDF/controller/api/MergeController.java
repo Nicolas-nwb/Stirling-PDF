@@ -224,15 +224,27 @@ public class MergeController {
                     .body(message.getBytes(StandardCharsets.UTF_8));
         } finally {
             if (mergedDocument != null) {
-                mergedDocument.close(); // Close the merged document
+                try {
+                    mergedDocument.close(); // Close the merged document
+                } catch (IOException ioe) {
+                    log.warn("Unable to close merged PDF document", ioe);
+                }
             }
             for (File file : filesToDelete) {
                 if (file != null) {
-                    Files.deleteIfExists(file.toPath()); // Delete temporary files
+                    try {
+                        Files.deleteIfExists(file.toPath()); // Delete temporary files
+                    } catch (IOException ioe) {
+                        log.warn("Unable to delete temporary file {}", file, ioe);
+                    }
                 }
             }
             if (mergedTempFile != null) {
-                Files.deleteIfExists(mergedTempFile.toPath());
+                try {
+                    Files.deleteIfExists(mergedTempFile.toPath());
+                } catch (IOException ioe) {
+                    log.warn("Unable to delete merged temporary file", ioe);
+                }
             }
         }
     }
