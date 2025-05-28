@@ -3,6 +3,7 @@ package stirling.software.SPDF.controller.api;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -18,6 +19,7 @@ import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.interactive.form.PDAcroForm;
 import org.apache.pdfbox.pdmodel.interactive.form.PDField;
 import org.apache.pdfbox.pdmodel.interactive.form.PDSignatureField;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -117,8 +119,7 @@ public class MergeController {
                     "This endpoint merges multiple PDF files or URLs pointing to PDFs into a single PDF file."
                             + " The merged file will contain all pages from the input files in the order they were"
                             + " provided. Input:PDF or URL Output:PDF Type:MISO")
-    public ResponseEntity<byte[]> mergePdfs(@ModelAttribute MergePdfsRequest request)
-            throws IOException {
+    public ResponseEntity<byte[]> mergePdfs(@ModelAttribute MergePdfsRequest request) {
         List<File> filesToDelete = new ArrayList<>(); // List of temporary files to delete
         File mergedTempFile = null;
         PDDocument mergedDocument = null;
@@ -209,20 +210,41 @@ public class MergeController {
             return WebResponseUtils.boasToWebResponse(
                     baos, mergedFileName); // Return the modified PDF
 
+        } catch (IllegalArgumentException ex) {
+            log.error("Error in merge pdf process", ex);
+            return ResponseEntity.badRequest()
+                    .body(ex.getMessage().getBytes(StandardCharsets.UTF_8));
         } catch (Exception ex) {
             log.error("Error in merge pdf process", ex);
-            throw ex;
+            String message =
+                    ex.getMessage() != null
+                            ? ex.getMessage()
+                            : "Unexpected error during merge process";
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(message.getBytes(StandardCharsets.UTF_8));
         } finally {
             if (mergedDocument != null) {
-                mergedDocument.close(); // Close the merged document
+                try {
+                    mergedDocument.close(); // Close the merged document
+                } catch (IOException ioe) {
+                    log.warn("Unable to close merged PDF document", ioe);
+                }
             }
             for (File file : filesToDelete) {
                 if (file != null) {
-                    Files.deleteIfExists(file.toPath()); // Delete temporary files
+                    try {
+                        Files.deleteIfExists(file.toPath()); // Delete temporary files
+                    } catch (IOException ioe) {
+                        log.warn("Unable to delete temporary file {}", file, ioe);
+                    }
                 }
             }
             if (mergedTempFile != null) {
-                Files.deleteIfExists(mergedTempFile.toPath());
+                try {
+                    Files.deleteIfExists(mergedTempFile.toPath());
+                } catch (IOException ioe) {
+                    log.warn("Unable to delete merged temporary file", ioe);
+                }
             }
         }
     }
