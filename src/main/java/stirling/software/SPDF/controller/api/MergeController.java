@@ -20,6 +20,7 @@ import org.apache.pdfbox.pdmodel.interactive.form.PDAcroForm;
 import org.apache.pdfbox.pdmodel.interactive.form.PDField;
 import org.apache.pdfbox.pdmodel.interactive.form.PDSignatureField;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -135,14 +136,10 @@ public class MergeController {
             long totalSize = 0;
 
             if (files != null && files.length > 0) {
-                Arrays.sort(
-                        files,
-                        getSortComparator(
-                                request.getSortType()));
+                Arrays.sort(files, getSortComparator(request.getSortType()));
                 for (MultipartFile multipartFile : files) {
                     totalSize += multipartFile.getSize();
-                    File tempFile =
-                            GeneralUtils.convertMultipartFileToFile(multipartFile);
+                    File tempFile = GeneralUtils.convertMultipartFileToFile(multipartFile);
                     filesToDelete.add(tempFile);
                     inputFiles.add(tempFile);
                 }
@@ -213,6 +210,7 @@ public class MergeController {
         } catch (IllegalArgumentException ex) {
             log.error("Error in merge pdf process", ex);
             return ResponseEntity.badRequest()
+                    .contentType(MediaType.TEXT_PLAIN)
                     .body(ex.getMessage().getBytes(StandardCharsets.UTF_8));
         } catch (Exception ex) {
             log.error("Error in merge pdf process", ex);
@@ -221,6 +219,7 @@ public class MergeController {
                             ? ex.getMessage()
                             : "Unexpected error during merge process";
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .contentType(MediaType.TEXT_PLAIN)
                     .body(message.getBytes(StandardCharsets.UTF_8));
         } finally {
             if (mergedDocument != null) {
