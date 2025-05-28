@@ -118,8 +118,8 @@ public class GeneralUtils {
             // Check if the URL is reachable
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
 
-            // Pour les URLs S3 et autres services qui ne supportent pas HEAD,
-            // on utilise GET avec une plage limitée pour éviter de télécharger tout le fichier
+            // For S3 URLs and other services that don't support HEAD,
+            // use GET with limited range to avoid downloading the entire file
             if (url.getHost().contains("s3")
                     || url.getHost().contains("amazonaws")
                     || url.getHost().contains("wasabisys")
@@ -155,24 +155,24 @@ public class GeneralUtils {
                     || url.getHost().contains("rackspace")) {
                 connection.setRequestMethod("GET");
                 connection.setRequestProperty(
-                        "Range", "bytes=0-1023"); // Télécharge seulement les 1024 premiers bytes
+                        "Range", "bytes=0-1023"); // Download only the first 1024 bytes
             } else {
                 connection.setRequestMethod("HEAD");
             }
 
-            // Timeout configurations plus permissifs
-            connection.setConnectTimeout(10000); // 10 secondes
-            connection.setReadTimeout(10000); // 10 secondes
+            // More permissive timeout configurations
+            connection.setConnectTimeout(10000); // 10 seconds
+            connection.setReadTimeout(10000); // 10 seconds
 
-            // User-Agent pour éviter les blocages
+            // User-Agent to avoid blocking
             connection.setRequestProperty("User-Agent", "Stirling-PDF/1.0");
 
             int responseCode = connection.getResponseCode();
 
-            // Accepter les codes 200-399 et aussi 206 (Partial Content) pour les requêtes Range
+            // Accept codes 200-399 and also 206 (Partial Content) for Range requests
             return (200 <= responseCode && responseCode <= 399);
         } catch (Exception e) {
-            // Log l'erreur pour débugger
+            // Log error for debugging
             log.debug("URL validation failed for {}: {}", urlStr, e.getMessage());
             return false; // Return false in case of any exception
         }
