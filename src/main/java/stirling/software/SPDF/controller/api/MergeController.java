@@ -1,24 +1,24 @@
 package stirling.software.SPDF.controller.api;
 
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
+import java.io.InputStream;
+import java.net.URI;
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
+import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
 
-import org.apache.pdfbox.multipdf.PDFMergerUtility;
 import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.pdmodel.PDDocumentCatalog;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.interactive.form.PDAcroForm;
-import org.apache.pdfbox.pdmodel.interactive.form.PDField;
 import org.apache.pdfbox.pdmodel.interactive.form.PDSignatureField;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -28,7 +28,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 import lombok.RequiredArgsConstructor;
@@ -36,8 +35,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import stirling.software.SPDF.model.api.general.MergePdfsRequest;
 import stirling.software.common.service.CustomPDFDocumentFactory;
-import stirling.software.common.util.GeneralUtils;
-import stirling.software.common.util.WebResponseUtils;
+import org.apache.pdfbox.Loader;
 
 @RestController
 @Slf4j
@@ -114,136 +112,116 @@ public class MergeController {
     }
 
     @PostMapping(consumes = "multipart/form-data", value = "/merge-pdfs")
-    @Operation(
-            summary = "Merge multiple PDF files into one",
-            description =
-                    "This endpoint merges multiple PDF files or URLs pointing to PDFs into a single PDF file."
-                            + " The merged file will contain all pages from the input files in the order they were"
-                            + " provided. Input:PDF or URL Output:PDF Type:MISO")
-    public ResponseEntity<byte[]> mergePdfs(@ModelAttribute MergePdfsRequest request) {
-        List<File> filesToDelete = new ArrayList<>(); // List of temporary files to delete
-        File mergedTempFile = null;
-        PDDocument mergedDocument = null;
-
-        boolean removeCertSign = Boolean.TRUE.equals(request.getRemoveCertSign());
-
+    public ResponseEntity<byte[]> mergePdfs(@ModelAttribute MergePdfsRequest request)
+            throws IOException {
+        log.info("=== MANUAL MERGE CONTROLLER CALLED ===");
+        List<Path> tempFiles = new ArrayList<>();
+        List<PDDocument> sourceDocs = new ArrayList<>();
+        PDDocument resultDoc = null;
         try {
+            // traiter les fichiers uploadés
             MultipartFile[] files = request.getFileInput();
-            String[] urlInputs = request.getUrlInputs();
-
-            List<File> inputFiles = new ArrayList<>();
-            PDFMergerUtility mergerUtility = new PDFMergerUtility();
-            long totalSize = 0;
-
-            if (files != null && files.length > 0) {
-                Arrays.sort(files, getSortComparator(request.getSortType()));
-                for (MultipartFile multipartFile : files) {
-                    totalSize += multipartFile.getSize();
-                    File tempFile = GeneralUtils.convertMultipartFileToFile(multipartFile);
-                    filesToDelete.add(tempFile);
-                    inputFiles.add(tempFile);
-                }
-            } else if (urlInputs != null && urlInputs.length > 0) {
-                for (String url : urlInputs) {
-                    if (!GeneralUtils.isValidURL(url) || !GeneralUtils.isURLReachable(url)) {
-                        throw new IllegalArgumentException("Invalid or unreachable URL: " + url);
+            if (files != null) {
+                for (MultipartFile mf : files) {
+                    Path tmp = Files.createTempFile("merge_", ".pdf");
+                    tempFiles.add(tmp);
+                    mf.transferTo(tmp.toFile());
+                    try (PDDocument doc = Loader.loadPDF(tmp.toFile())) {
+                        if (doc.getNumberOfPages() == 0) {
+                            return errorResponse(
+                                    "File " + mf.getOriginalFilename() + " contains no pages",
+                                    HttpStatus.BAD_REQUEST);
+                        }
                     }
-                    File downloaded = GeneralUtils.downloadFileFromURL(url);
-                    totalSize += downloaded.length();
-                    filesToDelete.add(downloaded);
-                    inputFiles.add(downloaded);
+                    sourceDocs.add(Loader.loadPDF(tmp.toFile()));
                 }
-            } else {
-                throw new IllegalArgumentException(
-                        "No input provided, please upload files or provide URLs.");
             }
-
-            for (File file : inputFiles) {
-                mergerUtility.addSource(file);
-            }
-
-            mergedTempFile = Files.createTempFile("merged-", ".pdf").toFile();
-            mergerUtility.setDestinationFileName(mergedTempFile.getAbsolutePath());
-
-            mergerUtility.mergeDocuments(
-                    pdfDocumentFactory.getStreamCacheFunction(totalSize)); // Merge the documents
-
-            // Load the merged PDF document
-            mergedDocument = pdfDocumentFactory.load(mergedTempFile);
-
-            // Remove signatures if removeCertSign is true
-            if (removeCertSign) {
-                PDDocumentCatalog catalog = mergedDocument.getDocumentCatalog();
-                PDAcroForm acroForm = catalog.getAcroForm();
-                if (acroForm != null) {
-                    List<PDField> fieldsToRemove =
-                            acroForm.getFields().stream()
-                                    .filter(field -> field instanceof PDSignatureField)
-                                    .toList();
-
-                    if (!fieldsToRemove.isEmpty()) {
-                        acroForm.flatten(
-                                fieldsToRemove,
-                                false); // Flatten the fields, effectively removing them
+            // traiter les URLs
+            String[] urls = request.getUrlInputs();
+            if (urls != null) {
+                for (String url : urls) {
+                    Path tmp = Files.createTempFile("url_", ".pdf");
+                    tempFiles.add(tmp);
+                    downloadFileFromURL(url, tmp);
+                    try (PDDocument doc = Loader.loadPDF(tmp.toFile())) {
+                        if (doc.getNumberOfPages() == 0) {
+                            return errorResponse(
+                                    "Downloaded PDF has no pages from URL: " + url,
+                                    HttpStatus.BAD_REQUEST);
+                        }
                     }
+                    sourceDocs.add(Loader.loadPDF(tmp.toFile()));
                 }
             }
-
-            // Save the modified document to a new ByteArrayOutputStream
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            mergedDocument.save(baos);
-
-            String mergedFileName;
-            if (files != null && files.length > 0 && files[0].getOriginalFilename() != null) {
-                mergedFileName =
-                        files[0].getOriginalFilename().replaceFirst("[.][^.]+$", "")
-                                + "_merged_unsigned.pdf";
-            } else if (urlInputs != null && urlInputs.length > 0) {
-                mergedFileName =
-                        GeneralUtils.convertToFileName(urlInputs[0]) + "_merged_unsigned.pdf";
-            } else {
-                mergedFileName = "merged_unsigned.pdf";
+            if (sourceDocs.isEmpty()) {
+                return errorResponse(
+                        "No valid PDF sources found to merge.", HttpStatus.BAD_REQUEST);
             }
-            return WebResponseUtils.boasToWebResponse(
-                    baos, mergedFileName); // Return the modified PDF
-
+            // fusion manuelle
+            resultDoc = mergeDocuments(sourceDocs);
+            // suppression des signatures si demandé
+            if (Boolean.TRUE.equals(request.getRemoveCertSign())) {
+                PDAcroForm form = resultDoc.getDocumentCatalog().getAcroForm();
+                if (form != null) {
+                    form.getFields().removeIf(f -> f instanceof PDSignatureField);
+                    if (form.getFields().isEmpty())
+                        resultDoc.getDocumentCatalog().setAcroForm(null);
+                }
+            }
+            // construction de la réponse
+            try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+                resultDoc.save(baos);
+                byte[] data = baos.toByteArray();
+                HttpHeaders headers = new HttpHeaders();
+                headers.setContentType(MediaType.APPLICATION_PDF);
+                headers.setContentDispositionFormData("attachment", "merged.pdf");
+                return new ResponseEntity<>(data, headers, HttpStatus.OK);
+            }
         } catch (IllegalArgumentException ex) {
-            log.error("Error in merge pdf process", ex);
-            return ResponseEntity.badRequest()
-                    .contentType(MediaType.TEXT_PLAIN)
-                    .body(ex.getMessage().getBytes(StandardCharsets.UTF_8));
-        } catch (Exception ex) {
-            log.error("Error in merge pdf process", ex);
-            String message =
-                    ex.getMessage() != null
-                            ? ex.getMessage()
-                            : "Unexpected error during merge process";
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .contentType(MediaType.TEXT_PLAIN)
-                    .body(message.getBytes(StandardCharsets.UTF_8));
+            return errorResponse(ex.getMessage(), HttpStatus.BAD_REQUEST);
+        } catch (IOException ex) {
+            return errorResponse("I/O error: " + ex.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
         } finally {
-            if (mergedDocument != null) {
+            // nettoyage
+            for (PDDocument d : sourceDocs)
                 try {
-                    mergedDocument.close(); // Close the merged document
-                } catch (IOException ioe) {
-                    log.warn("Unable to close merged PDF document", ioe);
+                    d.close();
+                } catch (IOException ignored) {
                 }
-            }
-            for (File file : filesToDelete) {
-                if (file != null) {
-                    try {
-                        Files.deleteIfExists(file.toPath()); // Delete temporary files
-                    } catch (IOException ioe) {
-                        log.warn("Unable to delete temporary file {}", file, ioe);
-                    }
-                }
-            }
-            if (mergedTempFile != null) {
+            if (resultDoc != null)
                 try {
-                    Files.deleteIfExists(mergedTempFile.toPath());
-                } catch (IOException ioe) {
-                    log.warn("Unable to delete merged temporary file", ioe);
+                    resultDoc.close();
+                } catch (IOException ignored) {
                 }
+            for (Path p : tempFiles)
+                try {
+                    Files.deleteIfExists(p);
+                } catch (IOException ignored) {
+                }
+            log.info("=== MERGE CONTROLLER CLEANUP COMPLETED ===");
+        }
+    }
+
+    /**
+     * Aide à générer une réponse d'erreur en texte brut.
+     */
+    private ResponseEntity<byte[]> errorResponse(String msg, HttpStatus status) {
+        HttpHeaders h = new HttpHeaders();
+        h.setContentType(MediaType.TEXT_PLAIN);
+        return new ResponseEntity<>(msg.getBytes(StandardCharsets.UTF_8), h, status);
+    }
+
+    /**
+     * Downloads a file from URL to a specific path
+     */
+    private void downloadFileFromURL(String urlStr, Path targetPath) throws IOException {
+        URL url = URI.create(urlStr).toURL();
+        try (InputStream in = url.openStream();
+                java.io.OutputStream out = Files.newOutputStream(targetPath)) {
+            byte[] buffer = new byte[8192];
+            int bytesRead;
+            while ((bytesRead = in.read(buffer)) != -1) {
+                out.write(buffer, 0, bytesRead);
             }
         }
     }
